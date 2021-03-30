@@ -1,4 +1,4 @@
-package simplefsm
+package raftimpl
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 type httpTransport struct {
 }
 
-func newHttpTransport() *httpTransport {
+func NewHttpTransport() *httpTransport {
 	return &httpTransport{}
 }
 

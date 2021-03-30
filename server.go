@@ -1,38 +1,52 @@
-package simplefsm
+package main
 
 import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
 	"github.com/bitcapybara/raft"
+	"github.com/bitcapybara/simplefsm/raftimpl"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
-type server struct {
-	node raft.Node
+func main() {
+	s := newServer("", nil)
+	s.Start()
 }
 
-func (s *server) Run(me raft.NodeId, peers map[raft.NodeId]raft.NodeAddr) {
+type server struct {
+	addr string
+	node *raft.Node
+	echo *echo.Echo
+}
 
+func newServer(me raft.NodeId, peers map[raft.NodeId]raft.NodeAddr) *server {
 	// 启动 raft
 	config := raft.Config{
-		Fsm:                newFsm(),
-		RaftStatePersister: newRaftStatePersister(),
-		SnapshotPersister:  newSnapshotPersister(),
-		Transport:          newHttpTransport(),
+		Fsm:                raftimpl.NewFsm(),
+		RaftStatePersister: raftimpl.NewRaftStatePersister(),
+		SnapshotPersister:  raftimpl.NewSnapshotPersister(),
+		Transport:          raftimpl.NewHttpTransport(),
 		Peers:              peers,
 		Me:                 me,
 		ElectionMaxTimeout: 10000,
 		ElectionMinTimeout: 5000,
 		HeartbeatTimeout:   1000,
-		MaxLogLength:       2000,
+		MaxLogLength:       10,
 	}
 	node := raft.NewNode(config)
-	go node.Run()
 
 	// 启动 echo
 	e := echo.New()
+
+	return &server{addr: string(peers[me]), node: node, echo: e}
+}
+
+func (s *server) Start() {
+	go s.node.Run()
+
+	e := s.echo
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -47,7 +61,7 @@ func (s *server) Run(me raft.NodeId, peers map[raft.NodeId]raft.NodeAddr) {
 	e.POST("/addNewNode", s.addNewNode)
 
 	// Start server
-	e.Logger.Fatal(e.Start(string(peers[me])))
+	e.Logger.Fatal(e.Start(s.addr))
 }
 
 func (s *server) appendEntries(ctx echo.Context) error {

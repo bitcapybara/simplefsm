@@ -1,4 +1,4 @@
-package simplefsm
+package raftimpl
 
 import (
 	"bytes"
@@ -22,11 +22,11 @@ const (
 )
 
 type fsm struct {
-	state  state
-	mu     sync.Mutex
+	state state
+	mu    sync.Mutex
 }
 
-func newFsm() *fsm {
+func NewFsm() *fsm {
 	return &fsm{
 		state: Stopped,
 	}

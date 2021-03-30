@@ -1,4 +1,4 @@
-package simplefsm
+package raftimpl
 
 import (
 	"github.com/bitcapybara/raft"
@@ -11,7 +11,7 @@ type snapshotPersister struct {
 	mu       sync.Mutex
 }
 
-func newSnapshotPersister() *snapshotPersister {
+func NewSnapshotPersister() *snapshotPersister {
 	return &snapshotPersister{}
 }
 
@@ -34,7 +34,7 @@ type raftStatePersister struct {
 	mu        sync.Mutex
 }
 
-func newRaftStatePersister() *raftStatePersister {
+func NewRaftStatePersister() *raftStatePersister {
 	return &raftStatePersister{
 		raftState: raft.RaftState{
 			Term:     0,
