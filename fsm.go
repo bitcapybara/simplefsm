@@ -1,7 +1,9 @@
 package simplefsm
 
 import (
-	"log"
+	"bytes"
+	"encoding/gob"
+	"fmt"
 	"sync"
 )
 
@@ -22,29 +24,47 @@ const (
 type fsm struct {
 	state  state
 	mu     sync.Mutex
-	cmdCh  chan command
-	exitCh chan struct{}
 }
 
-func (f *fsm) start() {
-	for {
-		select {
-		case cmd := <-f.cmdCh:
-			f.transfer(cmd)
-		case <-f.exitCh:
-			return
-		}
+func newFsm() *fsm {
+	return &fsm{
+		state: Stopped,
 	}
 }
 
-func (f *fsm) transfer(cmd command) {
+// 应用状态机命令
+func (f *fsm) Apply(data []byte) error {
+	buffer := bytes.NewBuffer(data)
+	decoder := gob.NewDecoder(buffer)
+	var cmd command
+	err := decoder.Decode(&cmd)
+	if err != nil {
+		return err
+	}
+	return f.transfer(cmd)
+}
+
+// 生成状态机快照
+func (f *fsm) Serialize() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	encoder := gob.NewEncoder(buffer)
+	err := encoder.Encode(f.state)
+	if err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func (f *fsm) transfer(cmd command) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	var err error
 	if f.state == Running && cmd == Stop {
 		f.state = Stopped
 	} else if f.state == Stopped && cmd == Start {
 		f.state = Running
 	} else {
-		log.Printf("不支持的命令：%d\n", cmd)
+		err = fmt.Errorf("不支持的命令：%d\n", cmd)
 	}
+	return err
 }
