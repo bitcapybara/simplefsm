@@ -16,7 +16,7 @@ import (
 func main() {
 	// 命令行参数定义
 	var me string
-	flag.StringVar(&me,"me", "", "当前节点nodeId")
+	flag.StringVar(&me, "me", "", "当前节点nodeId")
 	var peerStr string
 	flag.StringVar(&peerStr, "peers", "", "指定所有节点地址，nodeId@nodeAddr，多个地址使用逗号间隔")
 	flag.Parse()
@@ -42,18 +42,21 @@ func main() {
 }
 
 type server struct {
-	addr string
-	node *raft.Node
-	echo *echo.Echo
+	addr   string
+	node   *raft.Node
+	echo   *echo.Echo
+	logger *raftimpl.SimpleLogger
 }
 
 func newServer(me raft.NodeId, peers map[raft.NodeId]raft.NodeAddr) *server {
 	// 启动 raft
+	logger := raftimpl.NewLogger()
 	config := raft.Config{
 		Fsm:                raftimpl.NewFsm(),
 		RaftStatePersister: raftimpl.NewRaftStatePersister(),
 		SnapshotPersister:  raftimpl.NewSnapshotPersister(),
 		Transport:          raftimpl.NewHttpTransport(),
+		Logger:             logger,
 		Peers:              peers,
 		Me:                 me,
 		ElectionMaxTimeout: 10000,
@@ -66,7 +69,7 @@ func newServer(me raft.NodeId, peers map[raft.NodeId]raft.NodeAddr) *server {
 	// 启动 echo
 	e := echo.New()
 
-	return &server{addr: string(peers[me]), node: node, echo: e}
+	return &server{addr: string(peers[me]), node: node, echo: e, logger: logger}
 }
 
 func (s *server) Start() {
