@@ -13,12 +13,16 @@ import (
 	"strings"
 )
 
+const NoneOption = ""
+
 func main() {
 	// 命令行参数定义
 	var me string
-	flag.StringVar(&me, "me", "", "当前节点nodeId")
+	flag.StringVar(&me, "me", NoneOption, "当前节点nodeId")
 	var peerStr string
-	flag.StringVar(&peerStr, "peers", "", "指定所有节点地址，nodeId@nodeAddr，多个地址使用逗号间隔")
+	flag.StringVar(&peerStr, "peers", NoneOption, "指定所有节点地址，nodeId@nodeAddr，多个地址使用逗号间隔")
+	var role string
+	flag.StringVar(&role, "role", NoneOption, "当前节点角色")
 	flag.Parse()
 
 	// 命令行参数解析
@@ -29,6 +33,11 @@ func main() {
 	if peerStr == "" {
 		log.Fatalln("未指定集群节点")
 	}
+
+	if role == "" {
+		log.Fatalln("未指定节点角色")
+	}
+
 	peerSplit := strings.Split(peerStr, ",")
 	peers := make(map[raft.NodeId]raft.NodeAddr, len(peerSplit))
 	for _, peerInfo := range peerSplit {
@@ -37,7 +46,7 @@ func main() {
 	}
 
 	// 启动 server
-	s := newServer(raft.NodeId(me), peers)
+	s := newServer(raft.RoleFromString(role), raft.NodeId(me), peers)
 	s.Start()
 }
 
@@ -48,17 +57,18 @@ type server struct {
 	logger *raftimpl.SimpleLogger
 }
 
-func newServer(me raft.NodeId, peers map[raft.NodeId]raft.NodeAddr) *server {
+func newServer(role raft.RoleStage, me raft.NodeId, peers map[raft.NodeId]raft.NodeAddr) *server {
 	// 启动 raft
 	logger := raftimpl.NewLogger()
 	config := raft.Config{
 		Fsm:                raftimpl.NewFsm(),
 		RaftStatePersister: raftimpl.NewRaftStatePersister(),
 		SnapshotPersister:  raftimpl.NewSnapshotPersister(),
-		Transport:          raftimpl.NewHttpTransport(),
+		Transport:          raftimpl.NewHttpTransport(logger),
 		Logger:             logger,
 		Peers:              peers,
 		Me:                 me,
+		Role:               role,
 		ElectionMaxTimeout: 10000,
 		ElectionMinTimeout: 5000,
 		HeartbeatTimeout:   1000,
@@ -68,7 +78,6 @@ func newServer(me raft.NodeId, peers map[raft.NodeId]raft.NodeAddr) *server {
 
 	// 启动 echo
 	e := echo.New()
-
 	return &server{addr: string(peers[me]), node: node, echo: e, logger: logger}
 }
 
@@ -95,11 +104,10 @@ func (s *server) Start() {
 
 func (s *server) appendEntries(ctx echo.Context) error {
 	// 反序列化获取请求参数
-	decoder := gob.NewDecoder(ctx.Request().Body)
 	var args raft.AppendEntry
-	deErr := decoder.Decode(&args)
-	if decoder != nil {
-		return fmt.Errorf("反序列化参数失败！%w", deErr)
+	bindErr := ctx.Bind(&args)
+	if bindErr != nil {
+		return fmt.Errorf("反序列化参数失败！%w", bindErr)
 	}
 	// 调用 raft 逻辑
 	var res raft.AppendEntryReply
@@ -108,26 +116,15 @@ func (s *server) appendEntries(ctx echo.Context) error {
 		return fmt.Errorf("raft 操作失败！%w", raftErr)
 	}
 	// 序列化并返回结果
-	data := new(bytes.Buffer)
-	encoder := gob.NewEncoder(data)
-	enErr := encoder.Encode(res)
-	if enErr != nil {
-		return fmt.Errorf("序列化结果失败！%w", enErr)
-	}
-	ctxErr := ctx.Blob(200, "application/octet-stream", data.Bytes())
-	if ctxErr != nil {
-		return fmt.Errorf("处理返回值失败！%w", ctxErr)
-	}
-	return nil
+	return ctx.JSON(200, res)
 }
 
 func (s *server) requestVote(ctx echo.Context) error {
 	// 反序列化获取请求参数
-	decoder := gob.NewDecoder(ctx.Request().Body)
 	var args raft.RequestVote
-	deErr := decoder.Decode(&args)
-	if decoder != nil {
-		return fmt.Errorf("反序列化参数失败！%w", deErr)
+	bindErr := ctx.Bind(&args)
+	if bindErr != nil {
+		return fmt.Errorf("反序列化参数失败！%w", bindErr)
 	}
 	// 调用 raft 逻辑
 	var res raft.RequestVoteReply
@@ -136,45 +133,24 @@ func (s *server) requestVote(ctx echo.Context) error {
 		return fmt.Errorf("raft 操作失败！%w", raftErr)
 	}
 	// 序列化并返回结果
-	data := new(bytes.Buffer)
-	encoder := gob.NewEncoder(data)
-	enErr := encoder.Encode(res)
-	if enErr != nil {
-		return fmt.Errorf("序列化结果失败！%w", enErr)
-	}
-	ctxErr := ctx.Blob(200, "application/octet-stream", data.Bytes())
-	if ctxErr != nil {
-		return fmt.Errorf("处理返回值失败！%w", ctxErr)
-	}
-	return nil
+	return ctx.JSON(200, res)
 }
 
 func (s *server) installSnapshot(ctx echo.Context) error {
 	// 反序列化获取请求参数
-	decoder := gob.NewDecoder(ctx.Request().Body)
-	var args raft.RequestVote
-	deErr := decoder.Decode(&args)
-	if decoder != nil {
-		return fmt.Errorf("反序列化参数失败！%w", deErr)
+	var args raft.InstallSnapshot
+	bindErr := ctx.Bind(&args)
+	if bindErr != nil {
+		return fmt.Errorf("反序列化参数失败！%w", bindErr)
 	}
 	// 调用 raft 逻辑
-	var res raft.RequestVoteReply
-	raftErr := s.node.RequestVote(args, &res)
+	var res raft.InstallSnapshotReply
+	raftErr := s.node.InstallSnapshot(args, &res)
 	if raftErr != nil {
 		return fmt.Errorf("raft 操作失败！%w", raftErr)
 	}
 	// 序列化并返回结果
-	data := new(bytes.Buffer)
-	encoder := gob.NewEncoder(data)
-	enErr := encoder.Encode(res)
-	if enErr != nil {
-		return fmt.Errorf("序列化结果失败！%w", enErr)
-	}
-	ctxErr := ctx.Blob(200, "application/octet-stream", data.Bytes())
-	if ctxErr != nil {
-		return fmt.Errorf("处理返回值失败！%w", ctxErr)
-	}
-	return nil
+	return ctx.JSON(200, res)
 }
 
 func (s *server) applyCommand(ctx echo.Context) error {
