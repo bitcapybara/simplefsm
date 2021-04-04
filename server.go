@@ -87,6 +87,7 @@ func (s *server) Start() {
 	e := s.echo
 	// Middleware
 	e.Use(middleware.Recover())
+	e.Use(middleware.Logger())
 
 	// Routes
 	e.POST("/appendEntries", s.appendEntries)
@@ -167,10 +168,16 @@ func (s *server) installSnapshot(ctx echo.Context) (err error) {
 	return ctx.JSON(200, res)
 }
 
-func (s *server) applyCommand(ctx echo.Context) error {
+func (s *server) applyCommand(ctx echo.Context) (err error) {
+	defer func() {
+		if err != nil {
+			s.logger.Error(err.Error())
+		}
+	}()
 	// 反序列化获取请求参数
 	command := ctx.QueryParam("command")
-	cmdBytes, msErr := msgpack.Marshal(command)
+	s.logger.Trace(fmt.Sprintf("获取到命令 %s", command))
+	cmdBytes, msErr := msgpack.Marshal(raftimpl.CommandFromString(command))
 	if msErr != nil {
 		return fmt.Errorf("序列化命令失败！%w", msErr)
 	}

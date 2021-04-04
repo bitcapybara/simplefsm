@@ -109,7 +109,7 @@ func (f *Fsm) transfer(cmd Command) error {
 		f.state = Running
 		f.logger.Trace(fmt.Sprintf("状态切换为 %s", StateToString(Running)))
 	} else {
-		return fmt.Errorf("不支持的命令：%d\n", cmd)
+		return fmt.Errorf("不支持的命令：state=%s, command=%s\n", StateToString(f.state), CommandToString(cmd))
 	}
 	return err
 }
