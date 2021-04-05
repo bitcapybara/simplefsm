@@ -73,7 +73,7 @@ func newServer(role raft.RoleStage, me raft.NodeId, peers map[raft.NodeId]raft.N
 		ElectionMaxTimeout: 10000,
 		ElectionMinTimeout: 5000,
 		HeartbeatTimeout:   1000,
-		MaxLogLength:       10,
+		MaxLogLength:       5,
 	}
 	node := raft.NewNode(config)
 

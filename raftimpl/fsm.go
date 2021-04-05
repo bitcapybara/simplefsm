@@ -97,6 +97,13 @@ func (f *Fsm) Serialize() ([]byte, error) {
 	return stBytes, nil
 }
 
+// 安装快照数据
+func (f *Fsm) Install(data []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return msgpack.Unmarshal(data, &f.state)
+}
+
 func (f *Fsm) transfer(cmd Command) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
