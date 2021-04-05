@@ -55,6 +55,7 @@ type server struct {
 	echo   *echo.Echo
 	fsm    *raftimpl.Fsm
 	logger *raftimpl.SimpleLogger
+	enable bool
 }
 
 func newServer(role raft.RoleStage, me raft.NodeId, peers map[raft.NodeId]raft.NodeAddr) *server {
@@ -78,7 +79,14 @@ func newServer(role raft.RoleStage, me raft.NodeId, peers map[raft.NodeId]raft.N
 
 	// 启动 echo
 	e := echo.New()
-	return &server{addr: string(peers[me]), node: node, echo: e, fsm: raftimpl.NewFsm(logger), logger: logger}
+	return &server{
+		addr:   string(peers[me]),
+		node:   node,
+		echo:   e,
+		fsm:    raftimpl.NewFsm(logger),
+		logger: logger,
+		enable: true,
+	}
 }
 
 func (s *server) Start() {
@@ -87,7 +95,6 @@ func (s *server) Start() {
 	e := s.echo
 	// Middleware
 	e.Use(middleware.Recover())
-	e.Use(middleware.Logger())
 
 	// Routes
 	e.POST("/appendEntries", s.appendEntries)
@@ -97,6 +104,8 @@ func (s *server) Start() {
 	e.POST("/changeConfig", s.changeConfig)
 	e.POST("/transferLeadership", s.transferLeadership)
 	e.POST("/addNewNode", s.addNewNode)
+	e.POST("/sleep", s.sleep)
+	e.POST("/awake", s.awake)
 
 	// Start server
 	e.Logger.Fatal(e.Start(s.addr))
@@ -108,6 +117,10 @@ func (s *server) appendEntries(ctx echo.Context) (err error) {
 			s.logger.Error(err.Error())
 		}
 	}()
+	if !s.enable {
+		err = fmt.Errorf("server not enable")
+		return
+	}
 	// 反序列化获取请求参数
 	var args raft.AppendEntry
 	bindErr := ctx.Bind(&args)
@@ -130,6 +143,10 @@ func (s *server) requestVote(ctx echo.Context) (err error) {
 			s.logger.Error(err.Error())
 		}
 	}()
+	if !s.enable {
+		err = fmt.Errorf("server not enable")
+		return
+	}
 	// 反序列化获取请求参数
 	var args raft.RequestVote
 	bindErr := ctx.Bind(&args)
@@ -152,6 +169,10 @@ func (s *server) installSnapshot(ctx echo.Context) (err error) {
 			s.logger.Error(err.Error())
 		}
 	}()
+	if !s.enable {
+		err = fmt.Errorf("server not enable")
+		return
+	}
 	// 反序列化获取请求参数
 	var args raft.InstallSnapshot
 	bindErr := ctx.Bind(&args)
@@ -174,6 +195,10 @@ func (s *server) applyCommand(ctx echo.Context) (err error) {
 			s.logger.Error(err.Error())
 		}
 	}()
+	if !s.enable {
+		err = fmt.Errorf("server not enable")
+		return
+	}
 	// 反序列化获取请求参数
 	command := ctx.QueryParam("command")
 	s.logger.Trace(fmt.Sprintf("获取到命令 %s", command))
@@ -194,7 +219,16 @@ func (s *server) applyCommand(ctx echo.Context) (err error) {
 	return ctx.JSON(200, res)
 }
 
-func (s *server) changeConfig(ctx echo.Context) error {
+func (s *server) changeConfig(ctx echo.Context) (err error) {
+	defer func() {
+		if err != nil {
+			s.logger.Error(err.Error())
+		}
+	}()
+	if !s.enable {
+		err = fmt.Errorf("server not enable")
+		return
+	}
 	// 反序列化获取请求参数
 	var peers map[raft.NodeId]raft.NodeAddr
 	argsErr := ctx.Bind(&peers)
@@ -214,7 +248,16 @@ func (s *server) changeConfig(ctx echo.Context) error {
 	return ctx.JSON(200, res)
 }
 
-func (s *server) transferLeadership(ctx echo.Context) error {
+func (s *server) transferLeadership(ctx echo.Context) (err error) {
+	defer func() {
+		if err != nil {
+			s.logger.Error(err.Error())
+		}
+	}()
+	if !s.enable {
+		err = fmt.Errorf("server not enable")
+		return
+	}
 	// 反序列化获取请求参数
 	var transferee raft.Server
 	argsErr := ctx.Bind(&transferee)
@@ -234,15 +277,24 @@ func (s *server) transferLeadership(ctx echo.Context) error {
 	return ctx.JSON(200, res)
 }
 
-func (s *server) addNewNode(ctx echo.Context) error {
+func (s *server) addNewNode(ctx echo.Context) (err error) {
+	defer func() {
+		if err != nil {
+			s.logger.Error(err.Error())
+		}
+	}()
+	if !s.enable {
+		err = fmt.Errorf("server not enable")
+		return
+	}
 	// 反序列化获取请求参数
-	var newNdoe raft.Server
-	argsErr := ctx.Bind(&newNdoe)
+	var newNode raft.Server
+	argsErr := ctx.Bind(&newNode)
 	if argsErr != nil {
 		return fmt.Errorf("读取请求参数失败！%w", argsErr)
 	}
 	args := raft.AddNewNode{
-		NewNode: newNdoe,
+		NewNode: newNode,
 	}
 	// 调用 raft 逻辑
 	var res raft.AddNewNodeReply
@@ -252,4 +304,14 @@ func (s *server) addNewNode(ctx echo.Context) error {
 	}
 	// 序列化并返回结果
 	return ctx.JSON(200, res)
+}
+
+func (s *server) sleep(ctx echo.Context) error {
+	s.enable = false
+	return ctx.JSON(200, &struct{ Res string }{Res: "OK"})
+}
+
+func (s *server) awake(ctx echo.Context) error {
+	s.enable = true
+	return ctx.JSON(200, &struct{ Res string }{Res: "OK"})
 }
