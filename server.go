@@ -97,6 +97,7 @@ func (s *server) Start() {
 	e.Use(middleware.Recover())
 
 	// Routes
+	e.GET("/state", s.getState)
 	e.POST("/appendEntries", s.appendEntries)
 	e.POST("/requestVote", s.requestVote)
 	e.POST("/installSnapshot", s.installSnapshot)
@@ -109,6 +110,10 @@ func (s *server) Start() {
 
 	// Start server
 	e.Logger.Fatal(e.Start(s.addr))
+}
+
+func (s *server) getState(ctx echo.Context) error {
+	return ctx.JSON(200, struct{ State string }{s.fsm.GetState()})
 }
 
 func (s *server) appendEntries(ctx echo.Context) (err error) {

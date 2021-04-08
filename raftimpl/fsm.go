@@ -104,6 +104,13 @@ func (f *Fsm) Install(data []byte) error {
 	return msgpack.Unmarshal(data, &f.state)
 }
 
+// 获取当前状态
+func (f *Fsm) GetState() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return StateToString(f.state)
+}
+
 func (f *Fsm) transfer(cmd Command) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
