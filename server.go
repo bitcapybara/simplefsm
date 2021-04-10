@@ -95,18 +95,20 @@ func (s *server) Start() {
 	e := s.echo
 	// Middleware
 	e.Use(middleware.Recover())
+	e.Use(middleware.Logger())
 
-	// Routes
+	// 由用户调用
 	e.GET("/state", s.getState)
+	e.POST("/applyCommand", s.applyCommand)
+	e.POST("/sleep", s.sleep)
+	e.POST("/awake", s.awake)
+	e.POST("/changeConfig", s.changeConfig)
+	e.POST("/addLearner", s.addLearner)
+	e.POST("/transferLeadership", s.transferLeadership)
+	// 由 raft 调用
 	e.POST("/appendEntries", s.appendEntries)
 	e.POST("/requestVote", s.requestVote)
 	e.POST("/installSnapshot", s.installSnapshot)
-	e.POST("/applyCommand", s.applyCommand)
-	e.POST("/changeConfig", s.changeConfig)
-	e.POST("/transferLeadership", s.transferLeadership)
-	e.POST("/addNewNode", s.addNewNode)
-	e.POST("/sleep", s.sleep)
-	e.POST("/awake", s.awake)
 
 	// Start server
 	e.Logger.Fatal(e.Start(s.addr))
@@ -224,6 +226,35 @@ func (s *server) applyCommand(ctx echo.Context) (err error) {
 	return ctx.JSON(200, res)
 }
 
+func (s *server) addLearner(ctx echo.Context) (err error) {
+	defer func() {
+		if err != nil {
+			s.logger.Error(err.Error())
+		}
+	}()
+	if !s.enable {
+		err = fmt.Errorf("server not enable")
+		return
+	}
+	// 反序列化获取请求参数
+	var peers map[raft.NodeId]raft.NodeAddr
+	argsErr := ctx.Bind(&peers)
+	if argsErr != nil {
+		return fmt.Errorf("读取请求参数失败！%w", argsErr)
+	}
+	args := raft.AddLearner{
+		Learners: peers,
+	}
+	// 调用 raft 逻辑
+	var res raft.AddLearnerReply
+	raftErr := s.node.AddLearner(args, &res)
+	if raftErr != nil {
+		return fmt.Errorf("raft 操作失败！%w", raftErr)
+	}
+	// 序列化并返回结果
+	return ctx.JSON(200, res)
+}
+
 func (s *server) changeConfig(ctx echo.Context) (err error) {
 	defer func() {
 		if err != nil {
@@ -275,35 +306,6 @@ func (s *server) transferLeadership(ctx echo.Context) (err error) {
 	// 调用 raft 逻辑
 	var res raft.TransferLeadershipReply
 	raftErr := s.node.TransferLeadership(args, &res)
-	if raftErr != nil {
-		return fmt.Errorf("raft 操作失败！%w", raftErr)
-	}
-	// 序列化并返回结果
-	return ctx.JSON(200, res)
-}
-
-func (s *server) addNewNode(ctx echo.Context) (err error) {
-	defer func() {
-		if err != nil {
-			s.logger.Error(err.Error())
-		}
-	}()
-	if !s.enable {
-		err = fmt.Errorf("server not enable")
-		return
-	}
-	// 反序列化获取请求参数
-	var newNode raft.Server
-	argsErr := ctx.Bind(&newNode)
-	if argsErr != nil {
-		return fmt.Errorf("读取请求参数失败！%w", argsErr)
-	}
-	args := raft.AddNewNode{
-		NewNode: newNode,
-	}
-	// 调用 raft 逻辑
-	var res raft.AddNewNodeReply
-	raftErr := s.node.AddNewNode(args, &res)
 	if raftErr != nil {
 		return fmt.Errorf("raft 操作失败！%w", raftErr)
 	}
