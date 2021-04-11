@@ -73,7 +73,7 @@ func newServer(role raft.RoleStage, me raft.NodeId, peers map[raft.NodeId]raft.N
 		ElectionMaxTimeout: 10000,
 		ElectionMinTimeout: 5000,
 		HeartbeatTimeout:   1000,
-		MaxLogLength:       5,
+		MaxLogLength:       50,
 	}
 	node := raft.NewNode(config)
 
@@ -95,7 +95,6 @@ func (s *server) Start() {
 	e := s.echo
 	// Middleware
 	e.Use(middleware.Recover())
-	e.Use(middleware.Logger())
 
 	// 由用户调用
 	e.GET("/state", s.getState)
