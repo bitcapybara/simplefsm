@@ -7,4 +7,4 @@ else
   nodeId=$1
 fi
 
-go run server.go -me "${nodeId}" -role Follower -peers node1@localhost:7701,node2@localhost:7702,node3@localhost:7703
+go run main.go -me "${nodeId}" -role Follower -peers node1@localhost:7701,node2@localhost:7702,node3@localhost:7703

@@ -1,6 +1,6 @@
 module github.com/bitcapybara/simplefsm
 
-go 1.15
+go 1.16
 
 require (
 	github.com/bitcapybara/raft v0.0.1

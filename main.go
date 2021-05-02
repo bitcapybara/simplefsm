@@ -101,9 +101,14 @@ func (s *server) Start() {
 	e.POST("/applyCommand", s.applyCommand)
 	e.POST("/sleep", s.sleep)
 	e.POST("/awake", s.awake)
+
+	// 成员变更
 	e.POST("/changeConfig", s.changeConfig)
+	// 添加 Learner 角色，可通过成员变更将其升级为 Follower 加入集群
 	e.POST("/addLearner", s.addLearner)
+	// 领导权转移
 	e.POST("/transferLeadership", s.transferLeadership)
+
 	// 由 raft 调用
 	e.POST("/appendEntries", s.appendEntries)
 	e.POST("/requestVote", s.requestVote)
